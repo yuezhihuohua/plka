@@ -1,0 +1,27 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
+import { installSkill, skillStatus } from '../tools/install-skill.mjs';
+import { startServer } from '../server.mjs';
+import { png } from './fixtures.mjs';
+const execute=promisify(execFile);
+test('installable skill connects without MCP and round-trips images and reports',async t=>{
+ const root=mkdtempSync(join(tmpdir(),'reference-skill-')),data=join(root,'data');const {server,store}=startServer({port:0,dataDir:data});await once(server,'listening');t.after(async()=>{await new Promise(r=>server.close(r));rmSync(root,{recursive:true,force:true});});
+ const destination=join(root,'skills','reference-library');const result=installSkill({destination,dataDir:data,port:server.address().port});assert.equal(result.installed,true);assert.equal(skillStatus(destination).installed,true);
+ const hashes=JSON.parse(readFileSync(join(destination,'integrity.json'),'utf8'));for(const [file,hash]of Object.entries(hashes))assert.equal(createHash('sha256').update(readFileSync(join(destination,file))).digest('hex'),hash);
+ const cli=async(...args)=>JSON.parse((await execute(process.execPath,[join(destination,'scripts/library.mjs'),...args])).stdout);
+ assert.equal((await cli('status')).running,true);
+ const folder=store.createCollection('Skill 验收'),image=store.importImage(png,{collections:[folder.id]}).item;
+ assert.equal((await cli('collections'))[0].name,'Skill 验收');const run=await cli('begin','--collection',folder.id,'--brief','协议测试，不是真实视觉分析');
+ const read=await cli('image','--run',run.id,'--item',image.id,'--out',join(root,'read-images'));assert.deepEqual(readFileSync(read.image_path),png);
+ const note=join(root,'note.txt');writeFileSync(note,'模拟观察，用于验证接口回写。');await cli('observe','--run',run.id,'--item',image.id,'--status','analyzed','--file',note);
+ const report=join(root,'report.md');writeFileSync(report,'Skill 集成测试报告。');const finished=await cli('finish','--run',run.id,'--file',report);assert.equal(finished.status,'complete');assert.equal(existsSync(finished.report_path),true);
+ const update=installSkill({destination,dataDir:data,port:server.address().port});assert.ok(update.backup);assert.equal(existsSync(join(update.backup,'SKILL.md')),true);
+ const other=join(root,'unrelated');mkdirSync(other);writeFileSync(join(other,'SKILL.md'),'unrelated');assert.throws(()=>installSkill({destination:other}),/未覆盖/);assert.equal(readFileSync(join(other,'SKILL.md'),'utf8'),'unrelated');
+});

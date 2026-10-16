@@ -1,0 +1,24 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {startServer} from '../server.mjs';
+import {png} from './fixtures.mjs';
+test('MCP stdio: handshake, real image content, full observation and report round-trip',async t=>{
+ const root=mkdtempSync(join(tmpdir(),'reference-mcp-'));const {server,store}=startServer({port:0,dataDir:root});await once(server,'listening');const folder=store.createCollection('MCP 测试'),item=store.importImage(png,{name:'小图',collections:[folder.id]}).item;
+ const child=spawn(process.execPath,[fileURLToPath(new URL('../mcp.mjs',import.meta.url))],{env:{...process.env,REFERENCE_DATA_DIR:root,REFERENCE_PORT:String(server.address().port)},stdio:['pipe','pipe','pipe']});const rl=createInterface({input:child.stdout});const pending=new Map();let id=0;let stderr='';child.stderr.on('data',b=>stderr+=b);rl.on('line',line=>{const r=JSON.parse(line);const p=pending.get(r.id);if(p){clearTimeout(p.timer);pending.delete(r.id);p.resolve(r.result);}});
+ const rpc=(method,params)=>new Promise((resolve,reject)=>{const n=++id;const timer=setTimeout(()=>reject(new Error('MCP 超时 '+stderr)),10000);pending.set(n,{resolve,timer});child.stdin.write(JSON.stringify({jsonrpc:'2.0',id:n,method,params})+'\n');});const call=(name,args={})=>rpc('tools/call',{name,arguments:args});
+ t.after(async()=>{child.kill();rl.close();for(const p of pending.values())clearTimeout(p.timer);await new Promise(r=>server.close(r));rmSync(root,{recursive:true,force:true});});
+ assert.equal((await rpc('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'test',version:'1'}})).serverInfo.name,'reference-library');assert.equal((await rpc('tools/list')).tools.length,7);
+ const collections=JSON.parse((await call('list_collections')).content[0].text);assert.equal(collections[0].name,folder.name);
+ const run=JSON.parse((await call('begin_analysis',{collection_id:folder.id,brief:'逐图分析'})).content[0].text);
+ const img=await call('read_analysis_image',{run_id:run.id,item_id:item.id});assert.equal(img.content[1].type,'image');assert.equal(img.content[1].data,png.toString('base64'));
+ await call('write_image_observation',{run_id:run.id,item_id:item.id,status:'analyzed',observation:'测试观察，不代表真实模型分析。'});
+ const result=JSON.parse((await call('finalize_analysis',{run_id:run.id,report:'协议集成测试报告。'})).content[0].text);assert.equal(result.status,'complete');assert.equal(store.analyses()[0].counts.analyzed,1);
+ assert.equal((await call('read_analysis_image',{run_id:'../escape',item_id:item.id})).isError,true);
+});

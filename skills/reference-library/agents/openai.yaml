@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plka分析"
+  short_description: "连接本地Plka，逐张分析指定收藏夹中的设计参考图并保存报告"
+  default_prompt: "使用 $reference-library 分析我指定的收藏夹，比较设计特征并把报告保存回图库。"

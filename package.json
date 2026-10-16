@@ -1,0 +1,20 @@
+{
+  "name": "reference-library",
+  "private": true,
+  "description": "Plka: local design reference library, Chrome collector and Codex Skill",
+  "version": "0.3.2",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "node --experimental-sqlite server.mjs",
+    "check": "node tools/check-project.mjs",
+    "test": "node --experimental-sqlite --test test/*.test.mjs",
+    "mcp": "node mcp.mjs",
+    "version:set": "node tools/set-version.mjs",
+    "build:mac": "node tools/build-macos.mjs all",
+    "build:windows": "node tools/render-windows-guide.mjs && node tools/build-windows.mjs x64",
+    "build:chrome": "node tools/build-chrome.mjs"
+  }
+}

@@ -1,0 +1,9 @@
+# Optional MCP integration. The bundled Codex Skill does not need this file.
+# Replace every example path with a real absolute path on your own computer.
+[mcp_servers.reference-library]
+command = "/absolute/path/to/node"
+args = ["/absolute/path/to/Plka/mcp.mjs"]
+
+[mcp_servers.reference-library.env]
+REFERENCE_DATA_DIR = "/absolute/path/to/your/library"
+REFERENCE_PORT = "47831"
