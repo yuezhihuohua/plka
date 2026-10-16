@@ -5,9 +5,15 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { configDir, resolveDataDir, rememberDataDir, VERSION } from '../lib/config.mjs';
+import {acquireStartLock} from '../lib/start-lock.mjs';
+import {isNewerVersion} from '../lib/version.mjs';
 
 const appRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-export async function startBackground({ noOpen = false, timeoutMs = 180000 } = {}) {
+export async function startBackground(options={}){
+  const release=await acquireStartLock(options.timeoutMs||180000);
+  try{return await startUnlocked(options);}finally{release();}
+}
+async function startUnlocked({ noOpen = false, timeoutMs = 180000, upgradeOwned = false } = {}) {
   const dataDir = resolveDataDir(), port = Number(process.env.REFERENCE_PORT) || 47831;
   const base = `http://127.0.0.1:${port}`;
   async function health() {
@@ -20,8 +26,8 @@ export async function startBackground({ noOpen = false, timeoutMs = 180000 } = {
       throw new Error('本机端口无法确认，请先检查已有服务后重试。');
     }
   }
-  async function verify(service) {
-    if (service?.ok !== true || service.version !== VERSION) throw new Error('已有其他版本或服务占用端口。请先用旧版停止入口关闭，再启动新版。');
+  async function verify(service, allowOld = false) {
+    if (service?.ok !== true || typeof service.version !== 'string') throw new Error('本机端口已有其他服务，未接管它。');
     const key = join(dataDir, '.connection-key');
     if (!existsSync(key)) throw new Error('端口中的服务属于另一份图库，未修改它。请先停止原服务。');
     const response = await fetch(base + '/api/stats', {
@@ -29,8 +35,17 @@ export async function startBackground({ noOpen = false, timeoutMs = 180000 } = {
       signal: AbortSignal.timeout(3000)
     });
     if (!response.ok) throw new Error('端口中的服务属于另一份图库，未修改它。请先停止原服务。');
+    if (!allowOld && service.version !== VERSION) throw new Error('已有其他版本运行，请更新本机 Plka 助手。');
   }
   let service = await health();
+  if (service && service.version !== VERSION && upgradeOwned) {
+    if(isNewerVersion(service.version,VERSION))throw new Error('这台电脑正在运行更新版本的 Plka，请使用新版助手；不会自动降级图库。');
+    await verify(service, true);
+    const response = await fetch(base + '/api/shutdown', {method:'POST',headers:{Authorization:'Bearer '+readFileSync(join(dataDir,'.connection-key'),'utf8').trim()},signal:AbortSignal.timeout(3000)});
+    if (!response.ok) throw new Error('旧版 Plka 尚未退出，未覆盖图库。');
+    for (let n=0;n<100;n++) { await delay(100); service=await health(); if (!service) break; }
+    if (service) throw new Error('旧版 Plka 正在退出，请稍后再试。');
+  }
   let reused = Boolean(service), logPath;
   if (service) await verify(service);
   else {
@@ -41,7 +56,7 @@ export async function startBackground({ noOpen = false, timeoutMs = 180000 } = {
     let child, spawnError, exited = false;
     try {
       child = spawn(process.execPath, ['--experimental-sqlite', join(appRoot, 'launcher.mjs'), '--no-open'], {
-        cwd: appRoot, detached: true, stdio: ['ignore', fd, fd],
+        cwd: appRoot, detached: true, windowsHide:true, stdio: ['ignore', fd, fd],
         env: { ...process.env, REFERENCE_DATA_DIR: dataDir, REFERENCE_PORT: String(port) }
       });
       child.on('error', error => { spawnError = error; });
@@ -63,6 +78,10 @@ export async function startBackground({ noOpen = false, timeoutMs = 180000 } = {
     // Prefer Chrome, since the companion extension is installed there.
     const chrome = spawnSync('/usr/bin/open', ['-a', 'Google Chrome', base], { stdio: 'ignore' });
     if (chrome.status !== 0) spawnSync('/usr/bin/open', [base], { stdio: 'ignore' });
+  } else if(!noOpen && process.platform==='win32') {
+    const candidates=[process.env.PROGRAMFILES,process.env['PROGRAMFILES(X86)'],process.env.LOCALAPPDATA].filter(Boolean).map(path=>join(path,'Google','Chrome','Application','chrome.exe'));
+    const chrome=candidates.find(path=>existsSync(path));
+    const browser=spawn(chrome||'rundll32.exe',chrome?[base]:['url.dll,FileProtocolHandler',base],{stdio:'ignore',detached:true,windowsHide:true});browser.on('error',()=>{});browser.unref();
   }
   return { ok: true, reused, version: VERSION, url: base + '/', dataDir, logPath };
 }

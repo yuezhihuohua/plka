@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import {makeMacApp} from './build-mac-app.mjs';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
 const selected = process.argv[2] || 'all';
@@ -42,7 +43,7 @@ for (const arch of selected === 'all' ? ['arm64', 'x64'] : [selected]) {
   rmSync(dest, { recursive: true, force: true }); mkdirSync(dest, { recursive: true });
   for (const file of ['package.json', 'server.mjs', 'launcher.mjs', 'mcp.mjs', 'lib', 'public', 'extension', 'skills']) cpSync(join(root, file), join(dest, file), { recursive: true });
   mkdirSync(join(dest, 'tools')); mkdirSync(join(dest, 'runtime', 'bin'), { recursive: true });
-  for (const file of ['install-skill.mjs', 'stop-service.mjs', 'runtime-info.mjs', 'start-background.mjs']) cpSync(join(root, 'tools', file), join(dest, 'tools', file));
+  for (const file of ['install-skill.mjs', 'stop-service.mjs', 'runtime-info.mjs', 'start-background.mjs','install-local.mjs','desktop-entry.mjs','native-host.mjs']) cpSync(join(root, 'tools', file), join(dest, 'tools', file));
   const node = join(dest, 'runtime', 'bin', 'node');
   cpSync(join(extracted, 'bin', 'node'), node); chmodSync(node, 0o755);
   cpSync(join(extracted, 'LICENSE'), join(dest, 'runtime', 'LICENSE-Node.txt'));
@@ -67,14 +68,20 @@ for (const arch of selected === 'all' ? ['arm64', 'x64'] : [selected]) {
   script('6-Connect-Existing-Library.command', 'print "请将包含 library.sqlite 的原 data 文件夹拖入此窗口，按回车确认："\nIFS= read -r plka_input\nif [[ -z "$plka_input" ]]; then exit 0; fi\nplka_paths=( ${(z)plka_input} )\nif [[ ${#plka_paths[@]} -ne 1 ]]; then print "请只选择一个图库文件夹。"; exit 1; fi\nplka_data_path=${(Q)plka_paths[1]}\n"./runtime/bin/node" tools/runtime-info.mjs --use-data "$plka_data_path"\nplka_status=$?\nif [[ $plka_status -eq 0 ]]; then print "已记录图库路径。请先停止旧服务，再运行 1-Start.command；随后重新安装 Skill。"; fi\nif [[ -t 0 ]]; then print "按回车关闭。"; read; fi\nexit $plka_status\n');
   cpSync(join(root, 'distribution', 'Mac-使用说明.md'), join(dest, '使用说明.md'));
   cpSync(join(root, 'distribution', 'Mac-使用说明.html'), join(dest, '使用说明.html'));
-  writeFileSync(join(dest, '先看这里.txt'), 'Plka ' + version + ' · ' + (arch === 'arm64' ? 'Apple 芯片（M 系列）' : 'Intel 芯片') + '\n\n1. 先将整个文件夹移到固定位置。\n2. 双击 1-Start.command；启动后可关闭终端窗口。\n3. 打开 使用说明.html，按图文步骤安装 Chrome 扩展与 Codex Skill。\n\n包内不含分享者的图库或连接凭据。不要只分享某个文件，请分享完整 ZIP。\n');
+  writeFileSync(join(dest, '先看这里.txt'), 'Plka ' + version + ' · ' + (arch === 'arm64' ? 'Apple 芯片（M 系列）' : 'Intel 芯片') + '\n\n首次：双击 Plka.app，安装一次本机助手。\n按使用说明，将打开的 ChromeExtension 文件夹添加到 Chrome。\n以后：直接打开 Chrome 收藏或点击悬浮按钮，无需启动脚本和连接码。\n旧版升级：保留原图库，替换旧扩展为新版，避免同时启用两份。\n其余 .command 文件仅为维护入口。\n\n包内不含分享者的图库、账号或连接信息。\n');
   let nativeTest;
   if (process.platform === 'darwin' && process.arch === arch) {
     const result = spawnSync(process.execPath, [join(root, 'tools', 'test-macos-package.mjs'), dest], { encoding: 'utf8', timeout: 120000 });
     if (result.status !== 0 || result.error) throw new Error('Native Mac package test failed:\n' + result.stdout + result.stderr + (result.error?.message || ''));
     nativeTest = JSON.parse(result.stdout); console.log(result.stdout.trim());
   }
-  writeFileSync(join(dest, '运行环境校验.json'), JSON.stringify({ productVersion: version, architecture: arch, nodeVersion: release.version, source: url, archiveSHA256: expected, verifiedAgainst: 'Official nodejs.org SHASUMS256.txt', nodeExecutableSHA256: sha(exe), officialRuntimeSignatureVerified, builtAt: new Date().toISOString(), nativeMacTested: Boolean(nativeTest), nativeTest: nativeTest || null, limitations: 'Plka 启动脚本未进行 Apple 开发者签名与公证；未在收件人电脑验证首次扩展安装、Gatekeeper 放行和 Codex 模型分析。' }, null, 2));
+  const app = makeMacApp(dest);
+  if(process.platform==='darwin'&&process.arch===arch){
+    const result=spawnSync(process.execPath,[join(root,'tools','test-desktop-install.mjs'),dest],{encoding:'utf8',timeout:120000});
+    if(result.status!==0||result.error)throw new Error('Desktop install test failed:\n'+result.stdout+result.stderr+(result.error?.message||''));
+    console.log(result.stdout.trim());nativeTest.desktop=JSON.parse(result.stdout);
+  }
+  writeFileSync(join(dest, '运行环境校验.json'), JSON.stringify({ productVersion: version, architecture: arch, nodeVersion: release.version, source: url, archiveSHA256: expected, verifiedAgainst: 'Official nodejs.org SHASUMS256.txt', nodeExecutableSHA256: sha(exe), officialRuntimeSignatureVerified, builtAt: new Date().toISOString(), nativeMacTested: Boolean(nativeTest), nativeTest: nativeTest || null, limitations: 'Plka 应用尚未采用 Apple 开发者证书签名与公证；收件人电脑的首次安全提示、扩展安装和 Codex 模型分析需实际验收。' }, null, 2));
   function walk(dir, prefix = '') { return readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(join(dir, e.name), prefix + e.name + '/') : [prefix + e.name]); }
   const files = walk(dest);
   for (const file of files) {

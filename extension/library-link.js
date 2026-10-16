@@ -1,7 +1,8 @@
 export const LIBRARY_URL='http://127.0.0.1:47831/';
-export async function openLibrary(api=chrome,fetcher=fetch){
+export async function openLibrary(api=chrome,fetcher=fetch,ensure){
   let online=false;
   try{const r=await fetcher(LIBRARY_URL+'api/health',{signal:AbortSignal.timeout(2000)});const health=await r.json();online=r.ok&&health.ok===true&&typeof health.version==='string';}catch{}
+  if(!online&&ensure){const result=await ensure();online=Boolean(result?.ok);}
   const offline=api.runtime.getURL('library-offline.html'),tabs=await api.tabs.query({});
   const library=tabs.find(tab=>{try{const u=new URL(tab.url);return u.origin==='http://127.0.0.1:47831'&&u.pathname==='/';}catch{return false;}});
   const fallback=tabs.find(tab=>tab.url===offline);

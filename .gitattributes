@@ -11,6 +11,8 @@
 *.toml text eol=lf
 *.command text eol=lf
 *.py text eol=lf
+*.c text eol=lf
+*.tbd text eol=lf
 *.ps1 text eol=crlf
 *.cmd text eol=crlf
 *.png binary

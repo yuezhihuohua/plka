@@ -13,7 +13,7 @@ export function startServer({port=Number(process.env.REFERENCE_PORT)||47831,data
   backupBeforeUpgrade(dataDir);
   const store=new Store(dataDir); const keyFile=join(store.root,'.connection-key');
   markVersion(store.root);
-  if(!existsSync(keyFile)) writeFileSync(keyFile,randomBytes(32).toString('hex'),{mode:0o600});
+  try{writeFileSync(keyFile,randomBytes(32).toString('hex'),{mode:0o600,flag:'wx'});}catch(error){if(error.code!=='EEXIST')throw error;}
   const token=readFileSync(keyFile,'utf8').trim();
   const same=(s)=>{const b=Buffer.from(s||'');const t=Buffer.from(token);return b.length===t.length&&timingSafeEqual(b,t);};
   const server=http.createServer(async(req,res)=>{

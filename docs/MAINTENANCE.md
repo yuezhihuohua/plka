@@ -118,3 +118,15 @@ Plka v版本号（开发试用版）
 
 附件：Mac arm64 / Mac x64 / Windows x64 / Chrome 扩展，及各自 SHA-256。
 ```
+
+## v0.4 自动唤醒的维护事项
+
+首次入口为 Mac Plka.app 与 Windows 1-Install-Plka.cmd；安装后源码副本、运行环境和 ChromeExtension 均在用户 Plka 目录。Chrome Native Messaging 仅允许 manifest 公钥计算出的固定扩展身份，普通网页和采集内容不得获得凭据。
+
+扩展的 manifest.key 是公开身份配置，必须保持稳定；不要每次打包重新生成。它不包含私钥。v0.3 到 v0.4 首次迁移需替换旧扩展，图库仍在原路径。旧版日常“启动 + 复制连接码 + 粘贴连接”流程已移除。
+
+本机助手路径按版本隔离，避免 Windows 正在运行的可执行文件被覆盖；重复打开相同版本复用已有安装。升级只退出凭据匹配的旧服务，升级快照失败则不修改数据库；不同图库或其他程序占端口不接管。
+
+构建工具用 Apple clang 与自有轻量入口生成通用 Mac 原生应用，并以系统 codesign 做本地完整性签名；旧版仅 x64 的工具链可由本机 Rosetta 运行。链接声明使用长期存在的 libSystem 接口，不修改系统 SDK；图标生成可使用 Pillow。正式开发者签名、公证和商店发布尚未包含。Linux 源码检查不能代替 Mac/Windows 的首次系统注册和实际浏览器联调。
+
+独立浏览器联调脚本为 tools/test-chrome-native.mjs，使用 PLKA_CHROME_BIN 指定 Google 官方测试版 Chrome，资料、端口、扩展副本和图库全部隔离。验证真实浏览器启动、无输入框自动识别、实际收藏、后台停止恢复及浏览器重启保留；不会使用个人 Chrome 配置。
