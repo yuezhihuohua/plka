@@ -68,7 +68,7 @@ for (const arch of selected === 'all' ? ['arm64', 'x64'] : [selected]) {
   script('6-Connect-Existing-Library.command', 'print "请将包含 library.sqlite 的原 data 文件夹拖入此窗口，按回车确认："\nIFS= read -r plka_input\nif [[ -z "$plka_input" ]]; then exit 0; fi\nplka_paths=( ${(z)plka_input} )\nif [[ ${#plka_paths[@]} -ne 1 ]]; then print "请只选择一个图库文件夹。"; exit 1; fi\nplka_data_path=${(Q)plka_paths[1]}\n"./runtime/bin/node" tools/runtime-info.mjs --use-data "$plka_data_path"\nplka_status=$?\nif [[ $plka_status -eq 0 ]]; then print "已记录图库路径。请先停止旧服务，再运行 1-Start.command；随后重新安装 Skill。"; fi\nif [[ -t 0 ]]; then print "按回车关闭。"; read; fi\nexit $plka_status\n');
   cpSync(join(root, 'distribution', 'Mac-使用说明.md'), join(dest, '使用说明.md'));
   cpSync(join(root, 'distribution', 'Mac-使用说明.html'), join(dest, '使用说明.html'));
-  writeFileSync(join(dest, '先看这里.txt'), 'Plka ' + version + ' · ' + (arch === 'arm64' ? 'Apple 芯片（M 系列）' : 'Intel 芯片') + '\n\n将 Plka.app 拖入“应用程序”，从应用程序打开 Plka。\n图库在独立窗口中打开，可固定到程序坞。\n首次收藏：Plka 顶部菜单“帮助 → 安装 Chrome 扩展”。\n以后直接在 Chrome 收藏，无需脚本和连接码。\n关闭图库窗口不影响 Chrome 收藏；点击程序坞图标可重新打开。\n原图库位置保持不变，请勿删除仍保存 data 的旧程序目录。\n\n包内不含分享者的图库、账号或连接信息。\n');
+  writeFileSync(join(dest, '先看这里.txt'), 'Plka ' + version + ' · ' + (arch === 'arm64' ? 'Apple 芯片（M 系列）' : 'Intel 芯片') + '\n\n将 Plka.app 拖入“应用程序”，从应用程序打开 Plka。\n图库在独立窗口中打开，可固定到程序坞。\n首次收藏：左侧“新手引导 / 安装收藏”，选择油猴或独立扩展。\n以后直接在 Chrome 收藏，无需脚本和连接码。\n关闭图库窗口继续后台运行；点击菜单栏 P 可重新打开。油猴版建议在引导中开启登录后台运行。\n原图库位置保持不变，请勿删除仍保存 data 的旧程序目录。\n\n包内不含分享者的图库、账号或连接信息。\n');
   let nativeTest;
   if (process.platform === 'darwin' && process.arch === arch) {
     const result = spawnSync(process.execPath, [join(root, 'tools', 'test-macos-package.mjs'), dest], { encoding: 'utf8', timeout: 120000 });

@@ -18,10 +18,10 @@ try {
     const child=spawnSync(info.nodePath,[join(info.appRoot,'tools','desktop-entry.mjs'),'--installed',...(process.argv.includes('--no-open')?['--no-open']:[])],{env:{...process.env,REFERENCE_DATA_DIR:info.dataDir},encoding:'utf8',windowsHide:true});
     if(child.error||child.status!==0)throw new Error(child.error?.message||child.stderr||'Plka 启动失败');
   }else{
-    await startBackground({noOpen:process.argv.includes('--no-open'),upgradeOwned:true});
+    const ready=await startBackground({noOpen:true,upgradeOwned:true});
     if(!process.argv.includes('--no-open')){
-      if(process.platform==='darwin')spawnSync('/usr/bin/open',[info.extensionFolder]);
-      else if(process.platform==='win32')spawnSync('explorer.exe',[info.extensionFolder],{windowsHide:true});
+      if(process.platform==='darwin')spawnSync('/usr/bin/open',[ready.url+'setup']);
+      else if(process.platform==='win32'){const child=spawnSync('rundll32.exe',['url.dll,FileProtocolHandler',ready.url+'setup'],{windowsHide:true});if(child.error)throw child.error;}
     }
   }
 }catch(error){

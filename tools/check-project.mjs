@@ -6,6 +6,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const read = path => readFileSync(join(root, path), 'utf8');
 const { version } = JSON.parse(read('package.json'));
 const errors = [];
+if(!read('public/plka.user.js').includes('// @version      '+version))errors.push('Userscript version differs from package.json');
 if (JSON.parse(read('extension/manifest.json')).version !== version) errors.push('Manifest version differs from package.json');
 if (!read('lib/config.mjs').includes(`VERSION='${version}'`)) errors.push('Runtime version differs from package.json');
 if (!read('public/index.html').includes(`<span class="version">${version}</span>`)) errors.push('UI version differs from package.json');

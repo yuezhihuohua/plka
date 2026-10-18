@@ -139,3 +139,9 @@ Mac 主入口为拖入 /Applications 的 Plka.app，使用 AppKit + WKWebView；
 构建器 tools/build-mac-desktop.mjs 为旧维护机提供公开系统接口的声明兼容层，不捆绑 Cocoa 实现，也不修改系统 SDK。NSObject 的 isa 基础布局、BOOL getter 的 isVisible/isMainFrame 等声明必须与系统 ABI 一致；仅编译或签名通过不足以确认可用。必须在隔离图库执行真实 WKWebView 渲染、持续运行和服务恢复测试，再在已安装应用中验收导入、报告保存与菜单栏重开。
 
 所有实际图库操作前创建备份。不得把个人图库截图放入仓库或分发包。Mac Intel 原生验收与 Apple 开发者签名、公证仍需单独完成。
+
+### 油猴与首次引导维护
+
+`public/plka.user.js` 为唯一脚本源，`npm run build:userscript` 生成可分享脚本。应用从 `/userscript/plka.user.js` 提供当前端口版本；无公开仓库或商店链接依赖。版本工具同步脚本元数据。油猴与 Chrome 扩展任选一项，不要把脚本检测结果当作扩展安装检测。
+
+本地收藏桥的上传凭据只对应一个短时请求，不可替代图库凭据；保留本地确认、固定已选图片索引、取消、期限、数量和大小限制。不得为了油猴开放 bootstrap 或把图库凭据放进网页、URL、脚本。登录启动为显式选择，维护入口只能打开安装器已知的扩展目录。

@@ -31,8 +31,14 @@ try{
   assert.ok(recovered,'The menu-bar app should recover its stopped local service');
   child.kill('SIGTERM');await once(child,'close');child=undefined;
   assert.equal((await api('/stats')).active,1);
+  rmSync(report,{force:true});
+  child=spawn(binary,['--background'],{env:{...env,PLKA_QA_HIDDEN:'0'},stdio:'ignore'});
+  for(let n=0;n<300&&!existsSync(report)&&child.exitCode===null;n++)await delay(100);
+  assert.ok(existsSync(report),'Login background launch did not render');
+  const background=JSON.parse(readFileSync(report,'utf8'));assert.equal(background.visible,false);assert.equal(background.backgroundLaunch,true);assert.equal(background.menuBarIcon,true);
+  child.kill('SIGTERM');await once(child,'close');child=undefined;
   const record=JSON.parse(readFileSync(join(env.PIKA_CONFIG_DIR,'desktop-installation.json'),'utf8'));assert.equal(realpathSync(record.desktopApp),realpathSync(app));
-  const checks=['actual-app-in-applications-folder',env.PLKA_QA_HIDDEN==='1'?'real-appkit-window-rendered-offscreen':'real-visible-appkit-window','real-webkit-gallery-renders-persistent-image','desktop-clipboard-bridge-loaded','menu-bar-status-item-created','sustained-window-does-not-crash','menu-bar-app-recovers-stopped-service','app-exit-keeps-chrome-library-service','desktop-app-binding-retained'];
+  const checks=['actual-app-in-applications-folder',env.PLKA_QA_HIDDEN==='1'?'real-appkit-window-rendered-offscreen':'real-visible-appkit-window','real-webkit-gallery-renders-persistent-image','desktop-clipboard-bridge-loaded','menu-bar-status-item-created','sustained-window-does-not-crash','menu-bar-app-recovers-stopped-service','app-exit-keeps-chrome-library-service','desktop-app-binding-retained','login-background-launch-keeps-window-hidden'];
   console.log(JSON.stringify({passed:true,platform:process.platform,architecture:process.arch,independentWindowTested:true,checks}));
 }finally{
   if(child&&child.exitCode===null&&child.signalCode===null){const closed=once(child,'close');child.kill('SIGTERM');await closed;}

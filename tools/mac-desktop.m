@@ -5,6 +5,8 @@
 #import <WebKit/WebKit.h>
 #endif
 
+static BOOL backgroundLaunch=NO;
+
 static NSDictionary *prepareLibrary(void) {
   NSString *root=[[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"plka"];
   NSTask *task=[NSTask new]; task.launchPath=[root stringByAppendingPathComponent:@"runtime/bin/node"];
@@ -42,14 +44,14 @@ static NSDictionary *prepareLibrary(void) {
   self.web.navigationDelegate=self;self.web.UIDelegate=self;self.web.autoresizingMask=18;self.window.contentView=self.web;
   [self.web loadHTMLString:@"<!doctype html><meta charset='utf-8'><style>body{margin:0;background:#fffdf8;color:#252831;display:grid;place-content:center;height:100vh;font:15px -apple-system;text-align:center}h1{font-size:48px;letter-spacing:-3px;margin:0 0 18px}p{color:#858792}</style><h1>Plka</h1><p>正在打开你的图库…</p>" baseURL:nil];
   [self buildMenu];
-  if(![[NSProcessInfo processInfo].environment[@"PLKA_QA_HIDDEN"]isEqualToString:@"1"]){[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];}
+  if(!backgroundLaunch&&![[NSProcessInfo processInfo].environment[@"PLKA_QA_HIDDEN"]isEqualToString:@"1"]){[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];}else if(backgroundLaunch)[NSApp setActivationPolicy:1];
   self.preparing=0;[self qaStage:@"window-created"];[self prepare];
   self.statusItem=[[NSStatusBar systemStatusBar]statusItemWithLength:-1];
   NSString *statusPath=[[[NSBundle mainBundle]resourcePath]stringByAppendingPathComponent:@"PlkaStatus@2x.png"];
   NSImage *statusImage=[[NSImage alloc]initWithContentsOfFile:statusPath];
   statusImage.template=YES;statusImage.size=(NSSize){18,18};self.statusItem.button.image=statusImage;self.statusItem.button.toolTip=@"Plka · 本地图库";
   NSMenu *statusMenu=[[NSMenu alloc]initWithTitle:@"Plka"];
-  NSArray *statusTitles=@[@"打开 Plka",@"导入图片…",@"Chrome 收藏扩展…",@"退出 Plka"],*statusActions=@[@"showLibrary:",@"importImages:",@"showExtension:",@"quitPlka:"];
+  NSArray *statusTitles=@[@"打开 Plka",@"导入图片…",@"安装网页收藏…",@"退出 Plka"],*statusActions=@[@"showLibrary:",@"importImages:",@"showExtension:",@"quitPlka:"];
   for(NSUInteger i=0;i<statusTitles.count;i++){NSMenuItem *item=[[NSMenuItem alloc]initWithTitle:statusTitles[i] action:NSSelectorFromString(statusActions[i]) keyEquivalent:@""];item.target=self;[statusMenu addItem:item];}
   self.statusItem.menu=statusMenu;
   self.healthTimer=[NSTimer scheduledTimerWithTimeInterval:10 target:self selector:@selector(checkHealth:) userInfo:nil repeats:YES];
@@ -57,7 +59,7 @@ static NSDictionary *prepareLibrary(void) {
 -(void)buildMenu {
   NSMenu *main=[[NSMenu alloc]initWithTitle:@"Plka"];
   NSArray *names=@[@"Plka",@"文件",@"编辑",@"显示",@"窗口",@"帮助"];
-  NSArray *titles=@[@[@"关于 Plka",@"图库与备份…",@"退出 Plka"],@[@"导入图片…",@"新建收藏夹…",@"关闭窗口"],@[@"撤销",@"重做",@"剪切",@"复制",@"粘贴",@"全选"],@[@"刷新图库"],@[@"最小化",@"显示图库"],@[@"安装 Chrome 扩展…",@"打开使用说明"]];
+  NSArray *titles=@[@[@"关于 Plka",@"图库与备份…",@"退出 Plka"],@[@"导入图片…",@"新建收藏夹…",@"关闭窗口"],@[@"撤销",@"重做",@"剪切",@"复制",@"粘贴",@"全选"],@[@"刷新图库"],@[@"最小化",@"显示图库"],@[@"安装网页收藏…",@"打开使用说明"]];
   NSArray *selectors=@[@[@"about:",@"settings:",@"quitPlka:"],@[@"importImages:",@"newCollection:",@"performClose:"],@[@"undo:",@"redo:",@"cut:",@"copy:",@"paste:",@"selectAll:"],@[@"reloadLibrary:"],@[@"performMiniaturize:",@"showLibrary:"],@[@"showExtension:",@"showGuide:"]];
   NSArray *keys=@[@[@"",@",",@"q"],@[@"o",@"N",@"w"],@[@"z",@"Z",@"x",@"c",@"v",@"a"],@[@"r"],@[@"m",@"1"],@[@"",@""]];
   for(NSUInteger i=0;i<names.count;i++){
@@ -117,18 +119,23 @@ static NSDictionary *prepareLibrary(void) {
   NSTask *task=[NSTask new];task.launchPath=[root stringByAppendingPathComponent:@"runtime/bin/node"];task.arguments=@[[root stringByAppendingPathComponent:@"tools/stop-service.mjs"]];[task launch];[task waitUntilExit];return 1;
 }
 -(void)quitPlka:(id)sender {[NSApp terminate:nil];}
--(void)showExtension:(id)sender {
-  NSAlert *a=[NSAlert new];a.messageText=@"启用 Chrome 收藏";a.informativeText=@"在 Chrome 打开 chrome://extensions，启用开发者模式，加载即将打开的 ChromeExtension 文件夹。只需安装一次，之后直接收藏。";
-  [a addButtonWithTitle:@"打开扩展文件夹"];[a addButtonWithTitle:@"稍后"];if([a runModal]==1000&&self.info[@"extensionFolder"])[[NSWorkspace sharedWorkspace]openFile:self.info[@"extensionFolder"]];
-}
+-(void)showExtension:(id)sender {[self showLibrary:nil];[self.web evaluateJavaScript:@"window.dispatchEvent(new Event('plka-open-setup'))" completionHandler:nil];}
 -(void)showGuide:(id)sender {[[NSWorkspace sharedWorkspace]openFile:[[[NSBundle mainBundle]resourcePath]stringByAppendingPathComponent:@"使用说明.html"]];}
 -(void)userContentController:(WKUserContentController*)controller didReceiveScriptMessage:(WKScriptMessage*)message {
   if(!message.frameInfo.mainFrame||![self isLocal:message.frameInfo.request.URL]||![message.body isKindOfClass:[NSDictionary class]])return;
   NSDictionary *body=message.body;NSString *text=body[@"text"];
   NSDictionary *env=[NSProcessInfo processInfo].environment;
   if([body[@"type"]isEqualToString:@"qa"]&&[env[@"PLKA_DESKTOP_QA"]isEqualToString:@"1"]&&[env[@"PLKA_QA_RESULT"]length]){
-    NSDictionary *record=@{@"web":body[@"data"]?:@{},@"visible":@(self.window.visible),@"independentWindow":@YES,@"menuBar":self.statusItem?@YES:@NO,@"menuBarIcon":self.statusItem.button.image?@YES:@NO};
+    NSDictionary *record=@{@"web":body[@"data"]?:@{},@"visible":@(self.window.visible),@"independentWindow":@YES,@"menuBar":self.statusItem?@YES:@NO,@"menuBarIcon":self.statusItem.button.image?@YES:@NO,@"backgroundLaunch":@(backgroundLaunch)};
     [[NSJSONSerialization dataWithJSONObject:record options:2 error:0]writeToFile:env[@"PLKA_QA_RESULT"] atomically:YES];return;
+  }
+  if([body[@"type"]isEqualToString:@"open-extension-folder"]&&self.info[@"extensionFolder"])[[NSWorkspace sharedWorkspace]openFile:self.info[@"extensionFolder"]];
+  if([body[@"type"]isEqualToString:@"open-browser"]){
+    NSString *path=body[@"path"];
+    if([path isKindOfClass:[NSString class]]&&([path isEqualToString:@"/setup"]||[path isEqualToString:@"/demo"]||[path isEqualToString:@"/userscript/plka.user.js"])){
+      NSString *url=[NSString stringWithFormat:@"%@%@",self.info[@"url"],[path substringFromIndex:1]];
+      NSTask *task=[NSTask new];task.launchPath=@"/usr/bin/open";task.arguments=@[@"-a",@"Google Chrome",url];[task launch];[task waitUntilExit];if(task.terminationStatus!=0)[[NSWorkspace sharedWorkspace]openURL:[NSURL URLWithString:url]];
+    }
   }
   if([body[@"type"]isEqualToString:@"copy"]&&[text isKindOfClass:[NSString class]]&&text.length<=1048576){NSPasteboard *board=[NSPasteboard generalPasteboard];[board clearContents];[board setString:text forType:NSPasteboardTypeString];}
 }
@@ -179,7 +186,7 @@ static NSDictionary *prepareLibrary(void) {
 int main(int argc,const char **argv) {
   @autoreleasepool {
     [[NSUserDefaults standardUserDefaults]setBool:NO forKey:@"NSQuitAlwaysKeepsWindows"];
-    for(int i=1;i<argc;i++)if([[NSString stringWithUTF8String:argv[i]]isEqualToString:@"--no-open"]){return [prepareLibrary()[@"ok"]boolValue]?0:1;}
+    for(int i=1;i<argc;i++){NSString *arg=[NSString stringWithUTF8String:argv[i]];if([arg isEqualToString:@"--no-open"])return [prepareLibrary()[@"ok"]boolValue]?0:1;if([arg isEqualToString:@"--background"])backgroundLaunch=YES;}
     __attribute__((objc_precise_lifetime)) PlkaDelegate *delegate=[PlkaDelegate new];NSApp.delegate=delegate;[NSApp run];
   }
   return 0;

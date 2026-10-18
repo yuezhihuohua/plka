@@ -25,6 +25,7 @@ __attribute__((objc_root_class)) @interface NSObject { Class isa; }
 +(id)stringWithUTF8String:(const char*)s; +(id)stringWithFormat:(NSString*)format,...;
 -(const char*)UTF8String; -(BOOL)isEqualToString:(NSString*)s; -(BOOL)hasPrefix:(NSString*)s; -(BOOL)hasSuffix:(NSString*)s;
 -(NSString*)stringByAppendingPathComponent:(NSString*)s;
+-(NSString*)substringFromIndex:(NSUInteger)index;
 @property(readonly) NSUInteger length;
 @end
 @interface NSArray : NSObject
