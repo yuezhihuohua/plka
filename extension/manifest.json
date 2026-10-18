@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Plka · 网页收藏",
   "description": "把网页图片保存到独立本地图库，收藏时选择收藏夹。",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "permissions": [
     "activeTab",
     "scripting",

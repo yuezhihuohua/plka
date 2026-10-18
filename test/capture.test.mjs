@@ -23,6 +23,9 @@ test('userscript capability cannot read a library or save without local user app
  assert.equal((await call('/bootstrap',undefined,{Origin:extension})).status,403);
  assert.equal((await call('/capture-bridge/'+id,undefined,{'X-Plka-Capture':'wrong'})).ok,false);
  assert.equal((await call('/capture-bridge/'+id+'/data',{index:0,data:png.toString('base64')},bridge)).ok,false);
+ assert.equal((await call('/capture-bridge/'+id,undefined,bridge)).value.opened,false);
+ assert.equal((await call('/captures/'+id,undefined,local)).ok,true);
+ assert.equal((await call('/capture-bridge/'+id,undefined,bridge)).value.opened,true);
  const folder=(await call('/collections',{name:'设计参考'},local)).value;
  assert.equal((await call('/captures/'+id+'/approve',{indexes:[0],collection_id:folder.id},{...local,Origin:extension})).status,403);
  assert.equal((await call('/captures/'+id+'/approve',{indexes:[0,1],collection_id:folder.id,note:'选图理由',tags:['排版']},local)).ok,true);
@@ -41,6 +44,13 @@ test('userscript capability cannot read a library or save without local user app
  const script=await fetch(base+'/userscript/plka.user.js');assert.match(script.headers.get('content-type'),/userscript/);assert.ok((await script.text()).includes(base));
  assert.equal((await fetch(base+'/collect',{headers:{'Sec-Fetch-Site':'cross-site'}})).status,200);
  assert.equal((await fetch(base+'/collect.js')).status,200);
+ const second=(await call('/capture-bridge',{items:[item]},{Origin:extension})).value;
+ assert.equal((await call('/capture-bridge/'+second.id+'/cancel',{},bridge)).ok,false);
+ assert.equal((await call('/capture-bridge/'+second.id,undefined,{'X-Plka-Capture':second.capability})).value.cancelled,false);
+ assert.equal((await call('/capture-bridge/'+second.id+'/cancel',{}, {'X-Plka-Capture':second.capability,Origin:'https://untrusted.example'})).status,403);
+ assert.equal((await call('/capture-bridge/'+second.id+'/cancel',{}, {'X-Plka-Capture':second.capability,Origin:extension})).ok,true);
+ assert.equal((await call('/capture-bridge/'+second.id,undefined,{'X-Plka-Capture':second.capability})).value.cancelled,true);
+ assert.equal((await call('/captures/'+second.id+'/approve',{indexes:[0],collection_id:folder.id},local)).ok,false);
 });
 
 test('capture requests expire, reject unexpected formats, limit pending sessions, and free completed sessions',()=>{
