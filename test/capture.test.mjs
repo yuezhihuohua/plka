@@ -11,7 +11,7 @@ import {loginStart} from '../lib/login-start.mjs';
 import {png} from './fixtures.mjs';
 const item={url:'https://images.example.test/image.png',page_url:'https://www.pinterest.com/pin/test',page_title:'测试页面',name:'测试图片',width:400,height:600};
 
-test('userscript capability cannot read a library or save without local user approval; retries retain successful images',async t=>{
+test('upload capability cannot read a library or save without chooser approval; retries retain successful images',async t=>{
  const root=mkdtempSync(join(tmpdir(),'plka-capture-'));const {server,token}=startServer({port:0,dataDir:root});await once(server,'listening');t.after(async()=>{await new Promise(r=>server.close(r));rmSync(root,{recursive:true,force:true});});const base=`http://127.0.0.1:${server.address().port}`,extension='chrome-extension://'+'b'.repeat(32);
  const call=async(path,body,headers={})=>{const r=await fetch(base+'/api'+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,ok:r.ok,value:await r.json()};};
  const local={Authorization:'Bearer '+token};
@@ -54,6 +54,26 @@ test('userscript capability cannot read a library or save without local user app
  assert.equal((await call('/capture-bridge/'+second.id+'/cancel',{}, {'X-Plka-Capture':second.capability,Origin:extension})).ok,true);
  assert.equal((await call('/capture-bridge/'+second.id,undefined,{'X-Plka-Capture':second.capability})).value.cancelled,true);
  assert.equal((await call('/captures/'+second.id+'/approve',{indexes:[0],collection_id:folder.id},local)).ok,false);
+});
+
+test('inline chooser is scoped to one capture, remembers successful destination, and cannot access private library operations',async t=>{
+ const root=mkdtempSync(join(tmpdir(),'plka-inline-'));const {server,token}=startServer({port:0,dataDir:root});await once(server,'listening');t.after(async()=>{await new Promise(r=>server.close(r));rmSync(root,{recursive:true,force:true});});const base=`http://127.0.0.1:${server.address().port}`,origin='chrome-extension://'+'c'.repeat(32);
+ const call=async(path,body,headers={})=>{const r=await fetch(base+'/api'+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Origin:origin,...headers},body:body===undefined?undefined:JSON.stringify(body)});return {ok:r.ok,status:r.status,value:await r.json()};};
+ const job=(await call('/capture-bridge',{items:[item]})).value,other=(await call('/capture-bridge',{items:[item]})).value;
+ const ui={'X-Plka-Chooser':job.chooser_capability},upload={'X-Plka-Capture':job.capability},auth={Authorization:'Bearer '+token};
+ assert.equal((await call('/capture-bridge/'+job.id+'/context',undefined,upload)).ok,false);
+ assert.equal((await call('/capture-bridge/'+other.id+'/context',undefined,ui)).ok,false);
+ for(const [path,body] of [['/items',undefined],['/collections',undefined],['/backup',{}],['/shutdown',{}],['/tags',{}]])assert.equal((await call(path,body,ui)).status,401);
+ assert.equal((await call('/capture-bridge/'+job.id+'/context',undefined,{...ui,Origin:'https://www.xiaohongshu.com'})).status,403);
+ const folder=(await call('/capture-bridge/'+job.id+'/collection',{name:'网页快速收藏'},ui)).value;
+ const context=(await call('/capture-bridge/'+job.id+'/context',undefined,ui)).value;assert.deepEqual(context.collections,[{id:folder.id,name:'网页快速收藏'}]);assert.equal(context.preferred_collection_id,'');assert.ok(context.tags.includes('配色'));
+ assert.equal((await call('/capture-bridge/'+job.id+'/approve',{indexes:[0],collection_id:folder.id},upload)).ok,false);
+ assert.equal((await call('/capture-bridge/'+job.id+'/data',{index:0,data:png.toString('base64')},upload)).ok,false);
+ assert.equal((await call('/capture-bridge/'+job.id+'/approve',{indexes:[0],collection_id:folder.id,tags:['配色'],note:'网页内保存'},ui)).ok,true);
+ const saved=await call('/capture-bridge/'+job.id+'/data',{index:0,data:png.toString('base64')},upload);assert.equal(saved.value.results[0].ok,true);assert.equal(saved.value.chooser_capability,undefined);
+ assert.equal((await call('/capture-bridge/'+other.id+'/context',undefined,{'X-Plka-Chooser':other.chooser_capability})).value.preferred_collection_id,folder.id);
+ const listed=(await call('/items',undefined,auth)).value.items;assert.equal(listed.length,1);assert.equal(listed[0].note,'网页内保存');
+ await call('/capture-bridge/'+job.id+'/cancel',{},upload);assert.equal((await call('/capture-bridge/'+job.id+'/context',undefined,ui)).ok,false);assert.equal((await call('/capture-bridge/'+job.id+'/collection',{name:'取消后不应创建'},ui)).ok,false);
 });
 
 test('capture requests expire, reject unexpected formats, limit pending sessions, and free completed sessions',()=>{

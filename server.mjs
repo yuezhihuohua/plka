@@ -25,7 +25,7 @@ export function startServer({port=Number(process.env.REFERENCE_PORT)||47831,data
     const hosts=[`127.0.0.1:${actualPort}`,`localhost:${actualPort}`];
     const origin=req.headers.origin||''; const localOrigin=hosts.some(h=>origin===`http://${h}`); const extensionOrigin=/^chrome-extension:\/\/[a-p]{32}$/.test(origin);
     const headers={'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Cache-Control':'no-store','X-Frame-Options':'DENY'};
-    if(extensionOrigin||localOrigin) { headers['Access-Control-Allow-Origin']=origin;headers['Vary']='Origin';headers['Access-Control-Allow-Headers']='Content-Type, Authorization, X-Plka-Capture';headers['Access-Control-Allow-Methods']='GET, POST, PATCH, OPTIONS'; }
+    if(extensionOrigin||localOrigin) { headers['Access-Control-Allow-Origin']=origin;headers['Vary']='Origin';headers['Access-Control-Allow-Headers']='Content-Type, Authorization, X-Plka-Capture, X-Plka-Chooser';headers['Access-Control-Allow-Methods']='GET, POST, PATCH, OPTIONS'; }
     const json=(v,status=200)=>{res.writeHead(status,{...headers,'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(v));};
     const u=new URL(req.url,`http://${hosts[0]}`); const route=u.pathname;
     // Public HTML entry pages contain no library data. A link from another site may
@@ -42,8 +42,14 @@ export function startServer({port=Number(process.env.REFERENCE_PORT)||47831,data
     try {
       if(route==='/api/capture-bridge'&&req.method==='POST')return json(captures.create(await body(1024*1024)),201);
       if(route==='/api/userscript/seen'&&req.method==='POST'){userscriptSeen=Date.now();return json({ok:true});}
-      const bridge=route.match(/^\/api\/capture-bridge\/([^/]+)(?:\/(data|cancel))?$/);
-      if(bridge){const job=captures.capability(bridge[1],req.headers['x-plka-capture']);if(req.method==='GET'&&!bridge[2])return json(captures.publicStatus(job));if(req.method==='POST'&&bridge[2]==='cancel')return json(captures.cancel(bridge[1]));if(req.method==='POST'&&bridge[2]==='data')return json(captures.upload(bridge[1],req.headers['x-plka-capture'],await body()));return json({error:'没有这个操作。'},404);}
+      const bridge=route.match(/^\/api\/capture-bridge\/([^/]+)(?:\/(data|cancel|context|collection|approve))?$/);
+      if(bridge){
+        const [,,action]=bridge,chooser=req.headers['x-plka-chooser'];
+        if(action==='context'&&req.method==='GET')return json(captures.context(bridge[1],chooser));
+        if(action==='collection'&&req.method==='POST')return json(captures.createFolder(bridge[1],chooser,(await body(64000)).name),201);
+        if(action==='approve'&&req.method==='POST'){captures.chooser(bridge[1],chooser);return json(captures.approve(bridge[1],await body(64000)));}
+        const job=captures.capability(bridge[1],req.headers['x-plka-capture']);if(req.method==='GET'&&!action)return json(captures.publicStatus(job));if(req.method==='POST'&&action==='cancel')return json(captures.cancel(bridge[1]));if(req.method==='POST'&&action==='data')return json(captures.upload(bridge[1],req.headers['x-plka-capture'],await body()));return json({error:'没有这个操作。'},404);
+      }
       if(route==='/userscript/plka.user.js'&&req.method==='GET'){
         const source=readFileSync(join(PROJECT_ROOT,'public','plka.user.js'),'utf8').replaceAll('http://127.0.0.1:47831',`http://127.0.0.1:${actualPort}`);
         res.writeHead(200,{...headers,'Content-Type':'application/x-userscript; charset=utf-8'});return res.end(source);
