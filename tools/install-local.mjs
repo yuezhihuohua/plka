@@ -75,7 +75,15 @@ export async function installLocal({appRoot=APP_ROOT,platform=process.platform,h
     const result=spawnSync('reg.exe',['ADD','HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\'+HOST_NAME,'/ve','/t','REG_SZ','/d',target,'/f'],{encoding:'utf8',windowsHide:true});
     if(result.error||result.status!==0)throw new Error('未能注册本机助手：'+(result.error?.message||result.stderr));
   }
-  const record={product:'reference-library',version:VERSION,appRoot:installedRoot,nodePath:node,extensionFolder,extensionId:extensionId(appRoot),nativeManifest:target,sourceDigest,runtimeDigest};
+  // Only an actual Plka bundle may become the desktop target; message callers
+  // cannot supply a path. Keep an earlier desktop binding for CLI/Skill repairs.
+  let desktopApp;
+  if(platform==='darwin'&&!sourceMode){
+    const candidate=resolve(appRoot,'../../..');
+    try{const plist=readFileSync(join(candidate,'Contents','Info.plist'),'utf8');if(candidate.endsWith('.app')&&plist.includes('<string>com.plka.desktop</string>')&&existsSync(join(candidate,'Contents','MacOS','Plka')))desktopApp=candidate;}catch{}
+    if(!desktopApp)try{const prior=JSON.parse(readFileSync(join(folder,'desktop-installation.json'),'utf8'));if(prior.desktopApp&&existsSync(join(prior.desktopApp,'Contents','MacOS','Plka')))desktopApp=prior.desktopApp;}catch{}
+  }
+  const record={product:'reference-library',version:VERSION,appRoot:installedRoot,nodePath:node,extensionFolder,extensionId:extensionId(appRoot),nativeManifest:target,sourceDigest,runtimeDigest,desktopApp};
   writeFileSync(join(folder,'desktop-installation.json'),JSON.stringify(record,null,2),{mode:0o600});
   return {...record,dataDir,reused};
 }

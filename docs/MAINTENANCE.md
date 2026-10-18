@@ -53,7 +53,7 @@ npm run version:set -- 0.3.3
 
 ## 4. 手动构建便携包
 
-目前构建脚本面向维护者的 **Mac** 环境，需要 Node 22、Python 3 和系统自带的 tar/unzip/codesign 等工具。Python 只用于构建 ZIP，不是收件人的运行依赖。首次构建需联网下载官方 Node 运行环境；以后仍会联网读取发行信息及校验值。
+目前构建脚本面向维护者的 **Mac** 环境，需要 Node 22、Python 3（含 Pillow，用于 Mac 图标）和系统自带的 tar/unzip/codesign 等工具。Python 用于生成图标及 ZIP，不是收件人的运行依赖。首次构建需联网下载官方 Node 运行环境；以后仍会联网读取发行信息及校验值。
 
 ```sh
 npm run build:mac
@@ -130,3 +130,12 @@ Plka v版本号（开发试用版）
 构建工具用 Apple clang 与自有轻量入口生成通用 Mac 原生应用，并以系统 codesign 做本地完整性签名；旧版仅 x64 的工具链可由本机 Rosetta 运行。链接声明使用长期存在的 libSystem 接口，不修改系统 SDK；图标生成可使用 Pillow。正式开发者签名、公证和商店发布尚未包含。Linux 源码检查不能代替 Mac/Windows 的首次系统注册和实际浏览器联调。
 
 独立浏览器联调脚本为 tools/test-chrome-native.mjs，使用 PLKA_CHROME_BIN 指定 Google 官方测试版 Chrome，资料、端口、扩展副本和图库全部隔离。验证真实浏览器启动、无输入框自动识别、实际收藏、后台停止恢复及浏览器重启保留；不会使用个人 Chrome 配置。
+
+
+## v0.5 Mac 桌面版
+
+Mac 主入口为拖入 /Applications 的 Plka.app，使用 AppKit + WKWebView；DMG 中只有应用、Applications 链接与说明，运行环境、扩展和工具在应用内部。关闭窗口进入菜单栏后台，退出命令停止本机服务；Chrome 下次使用可再次唤醒。
+
+构建器 tools/build-mac-desktop.mjs 为旧维护机提供公开系统接口的声明兼容层，不捆绑 Cocoa 实现，也不修改系统 SDK。NSObject 的 isa 基础布局、BOOL getter 的 isVisible/isMainFrame 等声明必须与系统 ABI 一致；仅编译或签名通过不足以确认可用。必须在隔离图库执行真实 WKWebView 渲染、持续运行和服务恢复测试，再在已安装应用中验收导入、报告保存与菜单栏重开。
+
+所有实际图库操作前创建备份。不得把个人图库截图放入仓库或分发包。Mac Intel 原生验收与 Apple 开发者签名、公证仍需单独完成。

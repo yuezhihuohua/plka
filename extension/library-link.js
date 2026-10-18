@@ -1,5 +1,6 @@
 export const LIBRARY_URL='http://127.0.0.1:47831/';
-export async function openLibrary(api=chrome,fetcher=fetch,ensure){
+export async function openLibrary(api=chrome,fetcher=fetch,ensure,openDesktop){
+  if(openDesktop){try{const result=await openDesktop();if(result?.ok&&result.desktop)return {ok:true,online:true,desktop:true};}catch{}}
   let online=false;
   try{const r=await fetcher(LIBRARY_URL+'api/health',{signal:AbortSignal.timeout(2000)});const health=await r.json();online=r.ok&&health.ok===true&&typeof health.version==='string';}catch{}
   if(!online&&ensure){const result=await ensure();online=Boolean(result?.ok);}

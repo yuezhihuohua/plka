@@ -2,7 +2,7 @@
   "name": "reference-library",
   "private": true,
   "description": "Plka: local design reference library, Chrome collector and Codex Skill",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"

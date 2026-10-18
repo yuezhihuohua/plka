@@ -1,7 +1,7 @@
 const HOST='com.plka.library',BASE='http://127.0.0.1:47831';
 export function createConnection(api=chrome,fetcher=fetch){
   let inFlight,port,request,failActive;
-  function native(){
+  function native(command='ensure-ready'){
     if(request)return request;
     let done,receive;
     const pending=new Promise((resolve,reject)=>{done=(error,value)=>error?reject(error):resolve(value);});
@@ -13,7 +13,7 @@ export function createConnection(api=chrome,fetcher=fetch){
     try{
       if(!port){port=api.runtime.connectNative(HOST);port.onDisconnect.addListener(()=>{const error=api.runtime.lastError;port=undefined;failActive?.(new Error(error?.message||'本机 Plka 助手已断开。'));});}
       receive=value=>{if(value?.ok&&typeof value.token==='string'&&value.token.length>=32)finish(null,value);else finish(new Error(value?.error||'Plka 未能启动。'));};
-      port.onMessage.addListener(receive);port.postMessage({command:'ensure-ready'});
+      port.onMessage.addListener(receive);port.postMessage({command});
     }catch(error){port=undefined;finish(error);}
     return pending;
   }
@@ -33,5 +33,11 @@ export function createConnection(api=chrome,fetcher=fetch){
       }
     })();try{return await inFlight;}finally{inFlight=undefined;}
   }
-  return {ensure};
+  async function openDesktop(){
+    if(inFlight)await inFlight;
+    if(request)await request;
+    try{const result=await native('open-desktop');await api.storage.local.set({connectionToken:result.token});return {ok:result.ok,desktop:result.desktop===true};}
+    catch{return {ok:false,desktop:false};}
+  }
+  return {ensure,openDesktop};
 }

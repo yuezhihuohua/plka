@@ -12,6 +12,8 @@
 *.command text eol=lf
 *.py text eol=lf
 *.c text eol=lf
+*.m text eol=lf
+*.h text eol=lf
 *.tbd text eol=lf
 *.ps1 text eol=crlf
 *.cmd text eol=crlf

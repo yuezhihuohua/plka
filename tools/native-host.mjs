@@ -1,8 +1,10 @@
 // Chrome stdio bridge. Credentials only travel to the exact allowed extension.
-import { readFileSync } from 'node:fs';
+import { readFileSync,existsSync } from 'node:fs';
+import {spawnSync} from 'node:child_process';
 import { join } from 'node:path';
 import { extensionOrigin } from '../lib/native-config.mjs';
 import { startBackground } from './start-background.mjs';
+import {configDir} from '../lib/config.mjs';
 const origin = process.argv.find(arg => arg.startsWith('chrome-extension://'));
 if (origin !== extensionOrigin()) { process.stderr.write('Unauthorized Plka extension origin\n'); process.exit(1); }
 let input = Buffer.alloc(0), queue = Promise.resolve();
@@ -11,11 +13,21 @@ function reply(value) {
   process.stdout.write(Buffer.concat([header, body]));
 }
 async function handle(message) {
-  if (!message || message.command !== 'ensure-ready' || Object.keys(message).some(k => k !== 'command')) return reply({ok:false,code:'INVALID_COMMAND',error:'不支持的 Plka 操作。'});
+  if (!message || !['ensure-ready','open-desktop'].includes(message.command) || Object.keys(message).some(k => k !== 'command')) return reply({ok:false,code:'INVALID_COMMAND',error:'不支持的 Plka 操作。'});
   try {
     const result = await startBackground({noOpen:true,upgradeOwned:true});
     const token = readFileSync(join(result.dataDir,'.connection-key'),'utf8').trim();
-    reply({ok:true,token,version:result.version,url:result.url});
+    let desktop=false;
+    if(message.command==='open-desktop'&&process.platform==='darwin'){
+      try{const record=JSON.parse(readFileSync(join(configDir(),'desktop-installation.json'),'utf8'));
+        const path=record.desktopApp;
+        if(typeof path==='string'&&path.endsWith('.app')&&existsSync(join(path,'Contents','MacOS','Plka'))&&readFileSync(join(path,'Contents','Info.plist'),'utf8').includes('<string>com.plka.desktop</string>')){
+          const environment=['PIKA_CONFIG_DIR','REFERENCE_DATA_DIR','REFERENCE_PORT','CODEX_HOME','PLKA_NATIVE_HOST_DIR'].filter(name=>process.env[name]).flatMap(name=>['--env',name+'='+process.env[name]]);
+          const opened=spawnSync('/usr/bin/open',[...environment,path],{stdio:'ignore',env:process.env});desktop=!opened.error&&opened.status===0;
+        }
+      }catch{}
+    }
+    reply({ok:true,token,version:result.version,url:result.url,desktop});
   } catch(error) { reply({ok:false,code:'START_FAILED',error:error.message}); }
 }
 process.stdin.on('data', chunk => {

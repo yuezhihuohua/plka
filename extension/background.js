@@ -21,7 +21,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{if(sender.id!==c
     if(!sender.url?.startsWith(chrome.runtime.getURL('')))return respond({ok:false,error:'此操作只允许 Plka 扩展页面调用。'});
     connection.ensure({force:Boolean(message.force)}).then(respond,e=>respond({ok:false,error:e.message}));return true;
   }
-  if(message.type==='open-library'){openLibrary(chrome,fetch,()=>connection.ensure()).then(respond,e=>respond({error:e.message}));return true;}
+  if(message.type==='open-library'){openLibrary(chrome,fetch,()=>connection.ensure(),()=>connection.openDesktop()).then(respond,e=>respond({error:e.message}));return true;}
   if(message.type==='sync-dock'){syncDockRegistration().then(respond,e=>respond({error:e.message}));return true;}
   if(message.type==='open-collector'){openCollector(message.item).then(()=>respond({ok:true}),e=>respond({error:e.message}));return true;}
 });

@@ -25,7 +25,7 @@ for (const file of files) {
     if (result.status !== 0) errors.push('Syntax: ' + file + '\n' + result.stderr);
     syntaxCount++;
   }
-  if (!['.mjs', '.js', '.md', '.html', '.json', '.yaml', '.yml', '.toml', '.css', '.svg', '.command', '.ps1', '.py'].includes(extname(file))) continue;
+  if (!['.mjs', '.js', '.m', '.h', '.md', '.html', '.json', '.yaml', '.yml', '.toml', '.css', '.svg', '.command', '.ps1', '.py'].includes(extname(file))) continue;
   const text = read(file);
   if (/\/Users\/[A-Za-z0-9_.-]+\//.test(text) || /[A-Z]:\\Users\\[^\\\s]+\\/.test(text)) errors.push('Personal absolute path: ' + file);
   if (/-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----/.test(text) || /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})\b/.test(text)) errors.push('Credential-shaped content: ' + file);
