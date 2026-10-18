@@ -42,7 +42,10 @@ test('userscript capability cannot read a library or save without local user app
  const onboarding=await call('/onboarding',undefined,local);assert.equal(onboarding.value.hasImages,true);assert.equal(onboarding.value.dismissed,false);
  await call('/onboarding',{dismissed:true},local);assert.equal((await call('/onboarding',undefined,local)).value.dismissed,true);
  const script=await fetch(base+'/userscript/plka.user.js');assert.match(script.headers.get('content-type'),/userscript/);assert.ok((await script.text()).includes(base));
- assert.equal((await fetch(base+'/collect',{headers:{'Sec-Fetch-Site':'cross-site'}})).status,200);
+ const chooser=await fetch(base+'/collect',{headers:{'Sec-Fetch-Site':'cross-site'}});assert.equal(chooser.status,200);
+ assert.match(chooser.headers.get('content-security-policy'),/img-src 'self' data: blob: https:/);
+ assert.match(chooser.headers.get('content-security-policy'),/connect-src 'self';/);
+ assert.doesNotMatch((await fetch(base+'/')).headers.get('content-security-policy'),/img-src[^;]*https:/);
  assert.equal((await fetch(base+'/collect.js')).status,200);
  const second=(await call('/capture-bridge',{items:[item]},{Origin:extension})).value;
  assert.equal((await call('/capture-bridge/'+second.id+'/cancel',{},bridge)).ok,false);

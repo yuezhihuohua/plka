@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Plka · 网页收藏
 // @namespace    https://plka.local/userscripts
-// @version      0.6.1
+// @version      0.6.2
 // @description  将网页图片收藏到自己的 Plka，本地选择收藏夹、笔记和标签。
 // @match        https://*.pinterest.com/*
 // @match        https://*.xiaohongshu.com/*
@@ -41,7 +41,7 @@
   const local=(path,options)=>request(BASE+path,options);
   if(location.origin===BASE){
     local('/api/userscript/seen',{method:'POST',data:{}}).catch(()=>{});
-    document.documentElement.dataset.plkaUserscript='0.6.1';
+    document.documentElement.dataset.plkaUserscript='0.6.2';
     if(location.pathname!=='/demo')return;
   }
   // Prefer the native extension when both collectors are installed.

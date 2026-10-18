@@ -143,7 +143,10 @@ export function startServer({port=Number(process.env.REFERENCE_PORT)||47831,data
       const filename=routes[route];if(!filename) return json({error:'页面不存在。'},404);
       const b=readFileSync(join(PROJECT_ROOT,'public',filename));
       const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
-      res.writeHead(200,{...headers,'Content-Type':types[extname(filename)],'Content-Security-Policy':"default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"});res.end(b);
+      // Only the collection chooser previews remote page images. Keep the
+      // gallery and private API connections restricted to this local origin.
+      const images=route==='/collect'?"'self' data: blob: https:":"'self' data: blob:";
+      res.writeHead(200,{...headers,'Content-Type':types[extname(filename)],'Content-Security-Policy':`default-src 'self'; img-src ${images}; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`});res.end(b);
     } catch(e) {json({error:e.message||'操作失败。'},400);}
   });
   server.requestTimeout=30000;
