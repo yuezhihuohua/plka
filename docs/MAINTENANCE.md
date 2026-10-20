@@ -8,7 +8,7 @@
 - GitHub Releases：Mac arm64、Mac x64、Windows x64 便携包、独立 Chrome 扩展包及 SHA-256。
 - 每位使用者本机：图片、数据库、连接码、日志、备份及安装后的 Skill 绑定。这些不进入仓库或 Release。
 
-仓库设为私有。需要同事直接访问源码或下载私有 Release 时，由仓库所有者在 Settings → Collaborators 中邀请其自己的 GitHub 账号；本项目不会自动邀请任何人。也可以把自己下载的完整便携包直接发给同事。
+仓库及 Release 按维护者要求公开，任何人都可以查看源码和下载分发包，无需邀请协作者。个人图库、连接凭据、备份和安装后的 Skill 绑定仍只保存在每位使用者本机，不进入仓库或分发包。也可以把下载的完整安装包直接发给同事。
 
 当前维护机的工作副本使用仅限本仓库的 SSH 部署密钥连接。私钥和固定的 GitHub 服务器公钥保存在本机 `.git/`，不进入源码或便携包；无需改写其他项目或全局 SSH 设置。在新电脑克隆时，请用自己的 GitHub 登录，或重新配置该电脑的仓库连接。撤销当前连接可在仓库 Settings → Deploy keys 删除对应的本机维护密钥。
 
@@ -53,7 +53,7 @@ npm run version:set -- 0.3.3
 
 ## 4. 手动构建便携包
 
-目前构建脚本面向维护者的 **Mac** 环境，需要 Node 22、Python 3 和系统自带的 tar/unzip/codesign 等工具。Python 只用于构建 ZIP，不是收件人的运行依赖。首次构建需联网下载官方 Node 运行环境；以后仍会联网读取发行信息及校验值。
+目前构建脚本面向维护者的 **Mac** 环境，需要 Node 22、Python 3（含 Pillow，用于 Mac 图标）和系统自带的 tar/unzip/codesign 等工具。Python 用于生成图标及 ZIP，不是收件人的运行依赖。首次构建需联网下载官方 Node 运行环境；以后仍会联网读取发行信息及校验值。
 
 ```sh
 npm run build:mac
@@ -78,7 +78,7 @@ Mac 默认同时生成两个芯片版本；只构建一份可运行 `node tools/
 5. 上传每个系统的 ZIP 及其 `.sha256`，并附独立 Chrome 扩展更新包。不要上传整个 `release/` 文件夹或数据目录。
 6. 发布说明写出变化、升级步骤、备份要求、对应系统的实际验证状态。试用版本勾选 Pre-release，先保存草稿检查附件再发布。
 
-私有仓库的 Release 也只对有权限的人可见。邀请协作者或改成公开属于单独的仓库管理操作。
+当前公开仓库的 Release 可直接分享下载链接。邀请协作者共同修改代码，或后续改变仓库可见性，属于单独的仓库管理操作。
 
 ## 6. 使用者怎样更新
 
@@ -118,3 +118,30 @@ Plka v版本号（开发试用版）
 
 附件：Mac arm64 / Mac x64 / Windows x64 / Chrome 扩展，及各自 SHA-256。
 ```
+
+## v0.4 自动唤醒的维护事项
+
+首次入口为 Mac Plka.app 与 Windows 1-Install-Plka.cmd；安装后源码副本、运行环境和 ChromeExtension 均在用户 Plka 目录。Chrome Native Messaging 仅允许 manifest 公钥计算出的固定扩展身份，普通网页和采集内容不得获得凭据。
+
+扩展的 manifest.key 是公开身份配置，必须保持稳定；不要每次打包重新生成。它不包含私钥。v0.3 到 v0.4 首次迁移需替换旧扩展，图库仍在原路径。旧版日常“启动 + 复制连接码 + 粘贴连接”流程已移除。
+
+本机助手路径按版本隔离，避免 Windows 正在运行的可执行文件被覆盖；重复打开相同版本复用已有安装。升级只退出凭据匹配的旧服务，升级快照失败则不修改数据库；不同图库或其他程序占端口不接管。
+
+构建工具用 Apple clang 与自有轻量入口生成通用 Mac 原生应用，并以系统 codesign 做本地完整性签名；旧版仅 x64 的工具链可由本机 Rosetta 运行。链接声明使用长期存在的 libSystem 接口，不修改系统 SDK；图标生成可使用 Pillow。正式开发者签名、公证和商店发布尚未包含。Linux 源码检查不能代替 Mac/Windows 的首次系统注册和实际浏览器联调。
+
+独立浏览器联调脚本为 tools/test-chrome-native.mjs，使用 PLKA_CHROME_BIN 指定 Google 官方测试版 Chrome，资料、端口、扩展副本和图库全部隔离。验证真实浏览器启动、无输入框自动识别、实际收藏、后台停止恢复及浏览器重启保留；不会使用个人 Chrome 配置。
+
+
+## v0.5 Mac 桌面版
+
+Mac 主入口为拖入 /Applications 的 Plka.app，使用 AppKit + WKWebView；DMG 中只有应用、Applications 链接与说明，运行环境、扩展和工具在应用内部。关闭窗口进入菜单栏后台，退出命令停止本机服务；Chrome 下次使用可再次唤醒。
+
+构建器 tools/build-mac-desktop.mjs 为旧维护机提供公开系统接口的声明兼容层，不捆绑 Cocoa 实现，也不修改系统 SDK。NSObject 的 isa 基础布局、BOOL getter 的 isVisible/isMainFrame 等声明必须与系统 ABI 一致；仅编译或签名通过不足以确认可用。必须在隔离图库执行真实 WKWebView 渲染、持续运行和服务恢复测试，再在已安装应用中验收导入、报告保存与菜单栏重开。
+
+所有实际图库操作前创建备份。不得把个人图库截图放入仓库或分发包。Mac Intel 原生验收与 Apple 开发者签名、公证仍需单独完成。
+
+### 油猴与首次引导维护
+
+`public/plka.user.js` 为唯一脚本源，`npm run build:userscript` 生成可分享脚本。应用从 `/userscript/plka.user.js` 提供当前端口版本；无公开仓库或商店链接依赖。版本工具同步脚本元数据。油猴与 Chrome 扩展任选一项，不要把脚本检测结果当作扩展安装检测。
+
+本地收藏桥的上传凭据只对应一个短时请求，不可替代图库凭据；保留本地确认、固定已选图片索引、取消、期限、数量和大小限制。不得为了油猴开放 bootstrap 或把图库凭据放进网页、URL、脚本。登录启动为显式选择，维护入口只能打开安装器已知的扩展目录。

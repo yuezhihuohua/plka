@@ -1,11 +1,14 @@
 import http from 'node:http';
+import {spawn} from 'node:child_process';
+import {CaptureBridge} from './lib/capture-bridge.mjs';
+import {loginStart} from './lib/login-start.mjs';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, cpSync } from 'node:fs';
 import { join, dirname, resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Store, MAX_IMAGE_BYTES } from './lib/store.mjs';
 import { installSkill, skillStatus, version as VERSION } from './tools/install-skill.mjs';
-import { resolveDataDir } from './lib/config.mjs';
+import { resolveDataDir,configDir } from './lib/config.mjs';
 import { backupBeforeUpgrade, markVersion } from './lib/upgrade.mjs';
 
 export const PROJECT_ROOT=dirname(fileURLToPath(import.meta.url));
@@ -13,20 +16,21 @@ export function startServer({port=Number(process.env.REFERENCE_PORT)||47831,data
   backupBeforeUpgrade(dataDir);
   const store=new Store(dataDir); const keyFile=join(store.root,'.connection-key');
   markVersion(store.root);
-  if(!existsSync(keyFile)) writeFileSync(keyFile,randomBytes(32).toString('hex'),{mode:0o600});
+  try{writeFileSync(keyFile,randomBytes(32).toString('hex'),{mode:0o600,flag:'wx'});}catch(error){if(error.code!=='EEXIST')throw error;}
   const token=readFileSync(keyFile,'utf8').trim();
+  const captures=new CaptureBridge(store);let userscriptSeen=0;
   const same=(s)=>{const b=Buffer.from(s||'');const t=Buffer.from(token);return b.length===t.length&&timingSafeEqual(b,t);};
   const server=http.createServer(async(req,res)=>{
     const actualPort=server.address()?.port||port;
     const hosts=[`127.0.0.1:${actualPort}`,`localhost:${actualPort}`];
     const origin=req.headers.origin||''; const localOrigin=hosts.some(h=>origin===`http://${h}`); const extensionOrigin=/^chrome-extension:\/\/[a-p]{32}$/.test(origin);
     const headers={'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Cache-Control':'no-store','X-Frame-Options':'DENY'};
-    if(extensionOrigin||localOrigin) { headers['Access-Control-Allow-Origin']=origin;headers['Vary']='Origin';headers['Access-Control-Allow-Headers']='Content-Type, Authorization';headers['Access-Control-Allow-Methods']='GET, POST, PATCH, OPTIONS'; }
+    if(extensionOrigin||localOrigin) { headers['Access-Control-Allow-Origin']=origin;headers['Vary']='Origin';headers['Access-Control-Allow-Headers']='Content-Type, Authorization, X-Plka-Capture, X-Plka-Chooser';headers['Access-Control-Allow-Methods']='GET, POST, PATCH, OPTIONS'; }
     const json=(v,status=200)=>{res.writeHead(status,{...headers,'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(v));};
     const u=new URL(req.url,`http://${hosts[0]}`); const route=u.pathname;
     // Public HTML entry pages contain no library data. A link from another site may
     // navigate here; API/bootstrap/media requests still require a trusted context.
-    const pageEntry=req.method==='GET'&&['/','/demo','/guide/windows'].includes(route);
+    const pageEntry=req.method==='GET'&&['/','/demo','/collect','/setup','/userscript/plka.user.js','/guide/windows'].includes(route);
     if(!hosts.includes(req.headers.host)) return json({error:'无效的本机地址。'},403);
     if(origin&&!localOrigin&&!extensionOrigin) return json({error:'请求来源未授权。'},403);
     if(req.headers['sec-fetch-site']==='cross-site'&&!extensionOrigin&&!pageEntry) return json({error:`请在浏览器地址栏打开 http://127.0.0.1:${actualPort}/`},403);
@@ -34,8 +38,22 @@ export function startServer({port=Number(process.env.REFERENCE_PORT)||47831,data
     const credential=req.headers.authorization?.replace(/^Bearer /,'');
     const cookie=String(req.headers.cookie||'').split(';').map(c=>c.trim()).find(c=>c.startsWith('reference_session='))?.slice(18);
     const authorized=same(credential)||same(cookie);
-    const body=async()=>{let size=0;const chunks=[]; for await(const chunk of req) {size+=chunk.length;if(size>MAX_IMAGE_BYTES*1.5+64000) throw new Error('请求过大，单张图片需小于 16 MB。');chunks.push(chunk);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new Error('无法读取请求内容。');}};
+    const body=async(max=MAX_IMAGE_BYTES*1.5+64000)=>{let size=0;const chunks=[]; for await(const chunk of req) {size+=chunk.length;if(size>max) throw new Error('请求过大，单张图片需小于 16 MB。');chunks.push(chunk);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new Error('无法读取请求内容。');}};
     try {
+      if(route==='/api/capture-bridge'&&req.method==='POST')return json(captures.create(await body(1024*1024)),201);
+      if(route==='/api/userscript/seen'&&req.method==='POST'){userscriptSeen=Date.now();return json({ok:true});}
+      const bridge=route.match(/^\/api\/capture-bridge\/([^/]+)(?:\/(data|cancel|context|collection|approve))?$/);
+      if(bridge){
+        const [,,action]=bridge,chooser=req.headers['x-plka-chooser'];
+        if(action==='context'&&req.method==='GET')return json(captures.context(bridge[1],chooser));
+        if(action==='collection'&&req.method==='POST')return json(captures.createFolder(bridge[1],chooser,(await body(64000)).name),201);
+        if(action==='approve'&&req.method==='POST'){captures.chooser(bridge[1],chooser);return json(captures.approve(bridge[1],await body(64000)));}
+        const job=captures.capability(bridge[1],req.headers['x-plka-capture']);if(req.method==='GET'&&!action)return json(captures.publicStatus(job));if(req.method==='POST'&&action==='cancel')return json(captures.cancel(bridge[1]));if(req.method==='POST'&&action==='data')return json(captures.upload(bridge[1],req.headers['x-plka-capture'],await body()));return json({error:'没有这个操作。'},404);
+      }
+      if(route==='/userscript/plka.user.js'&&req.method==='GET'){
+        const source=readFileSync(join(PROJECT_ROOT,'public','plka.user.js'),'utf8').replaceAll('http://127.0.0.1:47831',`http://127.0.0.1:${actualPort}`);
+        res.writeHead(200,{...headers,'Content-Type':'application/x-userscript; charset=utf-8'});return res.end(source);
+      }
       if(route==='/api/health') return json({ok:true,version:VERSION});
       if(route==='/guide/windows'&&req.method==='GET') {
         const source=existsSync(join(PROJECT_ROOT,'distribution','Windows-使用说明.html'))?join(PROJECT_ROOT,'distribution','Windows-使用说明.html'):join(PROJECT_ROOT,'使用说明.html');
@@ -47,6 +65,33 @@ export function startServer({port=Number(process.env.REFERENCE_PORT)||47831,data
         return json({token,root:store.root,version:VERSION,port:actualPort,mcp:{command:process.execPath,args:[join(PROJECT_ROOT,'mcp.mjs')],env:{REFERENCE_DATA_DIR:store.root,REFERENCE_PORT:String(actualPort)}}});
       }
       if((route.startsWith('/api/')||route.startsWith('/media/'))&&!authorized) return json({error:'请先连接本地图库。'},401);
+      if(route==='/api/onboarding'&&req.method==='GET'){
+        const saved=store.db.prepare("SELECT value FROM preferences WHERE key='onboarding'").get();
+        return json({dismissed:saved?JSON.parse(saved.value).dismissed:false,hasImages:store.stats().active>0,hasCollections:store.collections().length>0,userscriptSeen:Date.now()-userscriptSeen<90000,startup:loginStart()});
+      }
+      if(route==='/api/onboarding'&&req.method==='POST'){
+        const b=await body();if(typeof b.dismissed!=='boolean')throw new Error('引导设置无效。');store.db.prepare("INSERT INTO preferences(key,value) VALUES('onboarding',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify({dismissed:b.dismissed}));return json({ok:true});
+      }
+      if(route==='/api/integrations/extension-folder'&&req.method==='POST'){
+        if(extensionOrigin)return json({error:'请在本地引导中打开扩展文件夹。'},403);
+        const installed=join(configDir(),'ChromeExtension'),folder=existsSync(installed)?installed:join(PROJECT_ROOT,'extension');
+        const command=process.platform==='darwin'?'/usr/bin/open':process.platform==='win32'?'explorer.exe':null;
+        if(!command)return json({folder,opened:false});
+        await new Promise((resolve,reject)=>{const child=spawn(command,[folder],{stdio:'ignore',windowsHide:true});child.once('error',reject);child.once('spawn',()=>{child.unref();resolve();});});
+        return json({opened:true});
+      }
+      if(route==='/api/integrations/startup'){
+        if(extensionOrigin)return json({error:'请在本地图库设置登录启动。'},403);
+        if(req.method==='GET')return json(loginStart());if(req.method==='POST'){const b=await body();if(typeof b.enabled!=='boolean')throw new Error('启动设置无效。');return json(loginStart({},b.enabled));}
+      }
+      const capture=route.match(/^\/api\/captures\/([^/]+)(?:\/(approve|cancel))?$/);
+      if(capture){
+        if(extensionOrigin)return json({error:'请直接打开本地收藏窗口确认。'},403);
+        if(req.method==='GET'&&!capture[2])return json(captures.view(capture[1]));
+        if(req.method==='POST'&&capture[2]==='approve')return json(captures.approve(capture[1],await body()));
+        if(req.method==='POST'&&capture[2]==='cancel')return json(captures.cancel(capture[1]));
+        return json({error:'没有这个操作。'},404);
+      }
       if(route==='/api/integrations/codex'&&req.method==='GET') {const info=skillStatus();info.installed=info.installed&&info.dataDir===store.root&&info.port===actualPort;return json(info);}
       if(route==='/api/integrations/codex/install'&&req.method==='POST') {
         if(extensionOrigin) return json({error:'请在本地图库的 Codex Skill 页面安装。'},403);
@@ -100,11 +145,14 @@ export function startServer({port=Number(process.env.REFERENCE_PORT)||47831,data
         const path=join(PROJECT_ROOT,'extension',route.slice(1));const b=readFileSync(path);
         res.writeHead(200,{...headers,'Content-Type':route.endsWith('.js')?'text/javascript; charset=utf-8':route.endsWith('.css')?'text/css; charset=utf-8':'image/svg+xml'});return res.end(b);
       }
-      const routes={'/':'index.html','/app.js':'app.js','/styles.css':'styles.css','/demo':'demo.html','/demo.js':'demo.js'};
+      const routes={'/':'index.html','/app.js':'app.js','/styles.css':'styles.css','/demo':'demo.html','/demo.js':'demo.js','/setup':'index.html','/collect':'collect.html','/collect.js':'collect.js','/collect.css':'collect.css','/onboarding.js':'onboarding.js'};
       const filename=routes[route];if(!filename) return json({error:'页面不存在。'},404);
       const b=readFileSync(join(PROJECT_ROOT,'public',filename));
       const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
-      res.writeHead(200,{...headers,'Content-Type':types[extname(filename)],'Content-Security-Policy':"default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"});res.end(b);
+      // Only the collection chooser previews remote page images. Keep the
+      // gallery and private API connections restricted to this local origin.
+      const images=route==='/collect'?"'self' data: blob: https:":"'self' data: blob:";
+      res.writeHead(200,{...headers,'Content-Type':types[extname(filename)],'Content-Security-Policy':`default-src 'self'; img-src ${images}; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`});res.end(b);
     } catch(e) {json({error:e.message||'操作失败。'},400);}
   });
   server.requestTimeout=30000;

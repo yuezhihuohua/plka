@@ -2,12 +2,13 @@
   "manifest_version": 3,
   "name": "Plka · 网页收藏",
   "description": "把网页图片保存到独立本地图库，收藏时选择收藏夹。",
-  "version": "0.3.2",
+  "version": "0.7.0",
   "permissions": [
     "activeTab",
     "scripting",
     "storage",
-    "contextMenus"
+    "contextMenus",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "http://127.0.0.1:47831/*",
@@ -56,5 +57,6 @@
     "48": "icons/48.png",
     "128": "icons/128.png"
   },
-  "minimum_chrome_version": "103"
+  "minimum_chrome_version": "103",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA57CcNKmUlRaHnbZPKgAK2SRNgU1EqiGFV2PdlZx4Ve0d4T/uLNU/3Mj+PfxVbT4SNhD3sVvSo4GKX74F66yImPDG02lt8yN9BhEmmLBzAQhOimJFgVGujIGh4LgSKrQ/P5gPn3he1SMGZj/p6yTahc7HweMhe7x/fMxK+MIUR3TnInIW2dKm9Tqkc+BeUd8y9Xu+BHLDk9ZwevnK8sXc0LvrssiCLnCnqFTXCOX5YeiJErPbTksxjDf+1JZf3nsgLe6Wav1tCkVxU4F+sZtomqdQhytlrQWbR6/WO9SUy4O0sQvFkUhFsImoZ6tOQjm5vMYGnC5pl/UkmnU7kTUAjQIDAQAB"
 }

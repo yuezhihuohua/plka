@@ -5,6 +5,11 @@
 **/.connection-key
 **/library-config.json
 **/library-location.json
+**/desktop-installation.json
+**/com.plka.library.json
+**/native-launcher.sh
+**/native-launcher.cmd
+/start-*.lock
 **/integrity.json
 **/*.sqlite
 **/*.sqlite-*

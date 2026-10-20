@@ -6,6 +6,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const read = path => readFileSync(join(root, path), 'utf8');
 const { version } = JSON.parse(read('package.json'));
 const errors = [];
+if(!read('public/plka.user.js').includes('// @version      '+version))errors.push('Userscript version differs from package.json');
 if (JSON.parse(read('extension/manifest.json')).version !== version) errors.push('Manifest version differs from package.json');
 if (!read('lib/config.mjs').includes(`VERSION='${version}'`)) errors.push('Runtime version differs from package.json');
 if (!read('public/index.html').includes(`<span class="version">${version}</span>`)) errors.push('UI version differs from package.json');
@@ -25,7 +26,7 @@ for (const file of files) {
     if (result.status !== 0) errors.push('Syntax: ' + file + '\n' + result.stderr);
     syntaxCount++;
   }
-  if (!['.mjs', '.js', '.md', '.html', '.json', '.yaml', '.yml', '.toml', '.css', '.svg', '.command', '.ps1', '.py'].includes(extname(file))) continue;
+  if (!['.mjs', '.js', '.m', '.h', '.md', '.html', '.json', '.yaml', '.yml', '.toml', '.css', '.svg', '.command', '.ps1', '.py'].includes(extname(file))) continue;
   const text = read(file);
   if (/\/Users\/[A-Za-z0-9_.-]+\//.test(text) || /[A-Z]:\\Users\\[^\\\s]+\\/.test(text)) errors.push('Personal absolute path: ' + file);
   if (/-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----/.test(text) || /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})\b/.test(text)) errors.push('Credential-shaped content: ' + file);

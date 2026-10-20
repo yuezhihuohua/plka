@@ -1,0 +1,10 @@
+--- !tapi-tbd-v3
+archs: [ x86_64, arm64 ]
+platform: macosx
+install-name: '/usr/lib/libSystem.B.dylib'
+current-version: 1.0.0
+compatibility-version: 1.0.0
+exports:
+  - archs: [ x86_64, arm64 ]
+    symbols: [ _execv, _getenv, _open, _mkstemp, _dup2, _close, _snprintf, __NSGetExecutablePath, _strrchr, _strcmp, ___stack_chk_fail, ___stack_chk_guard, ___chkstk_darwin, ____chkstk_darwin, dyld_stub_binder ]
+...

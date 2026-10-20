@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import {openLibrary,LIBRARY_URL} from '../extension/library-link.js';
 import {syncDockRegistration,DOCK_SCRIPT_ID} from '../extension/dock-settings.js';
 const online=async()=>({ok:true,json:async()=>({ok:true,version:'0.3.2'})});
+test('desktop gallery activation opens no browser tab and returns no private credential',async()=>{
+ const api=browser();const result=await openLibrary(api,()=>{throw new Error('should use desktop');},undefined,async()=>({ok:true,desktop:true,token:'must-not-return'}));
+ assert.deepEqual(result,{ok:true,online:true,desktop:true});assert.equal(api.calls.length,0);assert.equal(result.token,undefined);
+});
 function browser(tabs=[]){const calls=[];return {calls,runtime:{getURL:file=>'chrome-extension://test/'+file},tabs:{query:async()=>tabs,update:async(id,options)=>{calls.push(['update',id,options]);return {id,windowId:2};},create:async options=>{calls.push(['create',options]);return {id:10,windowId:2};}},windows:{update:async(...args)=>calls.push(['focus',...args])}};}
 test('floating shortcut focuses an existing library without reloading it',async()=>{
  const api=browser([{id:5,url:LIBRARY_URL,windowId:2}]);const result=await openLibrary(api,online);

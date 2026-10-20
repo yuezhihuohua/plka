@@ -15,7 +15,7 @@ for (const path of ['package.json', 'extension/manifest.json']) {
   edits.set(path, JSON.stringify(value, null, 2) + '\n');
 }
 const escaped = prior.replaceAll('.', '\\.');
-for (const path of ['lib/config.mjs', 'public/index.html', 'README.md', 'distribution/Mac-使用说明.md', 'distribution/Windows-使用说明.md']) {
+for (const path of ['lib/config.mjs', 'public/index.html', 'public/plka.user.js', 'README.md', 'distribution/Mac-使用说明.md', 'distribution/Windows-使用说明.md']) {
   const source = readFileSync(file(path), 'utf8');
   if (!source.includes(prior)) throw new Error('Current version missing: ' + path);
   edits.set(path, source.replace(new RegExp('(?<![\\d.])' + escaped + '(?![\\d.])', 'g'), version));
